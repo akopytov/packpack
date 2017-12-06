@@ -71,20 +71,32 @@ $(BUILDDIR)/$(RPMSPEC): $(RPMSPECIN)
 	@echo "Patching RPM spec"
 	@echo "-------------------------------------------------------------------"
 	@cp $< $@.tmp
+# Don't touch %(auto)setup macros. This should be made optional at some point,
+# see https://github.com/packpack/packpack/issues/86
+	# sed \
+	# 	-e 's/Version:\([ ]*\).*/Version: $(VERSION)/' \
+	# 	-e 's/Release:\([ ]*\).*/Release: $(RELEASE)%{dist}/' \
+	# 	-e 's/Source0:\([ ]*\).*/Source0: $(TARBALL)/' \
+	# 	-e 's/%setup.*/%setup -q -n $(PRODUCT)-$(VERSION)/' \
+	#	  -re 's/(%autosetup.*)( -n \S*)(.*)/\1\3/' \
+	# 	-e '0,/%autosetup.*/ s/%autosetup.*/%autosetup -n $(PRODUCT)-$(VERSION)/' \
+	#	  -e '/%changelog/a\* $(THEDATE) $(CHANGELOG_NAME) <$(CHANGELOG_EMAIL)> - $(VERSION)-$(RELEASE)\n\- $(CHANGELOG_TEXT)\n' \
+	# 	-i $@.tmp
+	# grep -F "Version: $(VERSION)" $@.tmp && \
+	# 	grep -F "Release: $(RELEASE)" $@.tmp && \
+	# 	grep -F "Source0: $(TARBALL)" $@.tmp && \
+	# 	(grep -F "%setup -q -n $(PRODUCT)-$(VERSION)" $@.tmp || \
+	# 	grep -F "%autosetup" $@.tmp) || \
+	# 	(echo "Failed to patch RPM spec" && exit 1)
 	sed \
 		-e 's/Version:\([ ]*\).*/Version: $(VERSION)/' \
 		-e 's/Release:\([ ]*\).*/Release: $(RELEASE)%{dist}/' \
 		-e 's/Source0:\([ ]*\).*/Source0: $(TARBALL)/' \
-		-e 's/%setup.*/%setup -q -n $(PRODUCT)-$(VERSION)/' \
-                -re 's/(%autosetup.*)( -n \S*)(.*)/\1\3/' \
-		-e '0,/%autosetup.*/ s/%autosetup.*/%autosetup -n $(PRODUCT)-$(VERSION)/' \
                 -e '/%changelog/a\* $(THEDATE) $(CHANGELOG_NAME) <$(CHANGELOG_EMAIL)> - $(VERSION)-$(RELEASE)\n\- $(CHANGELOG_TEXT)\n' \
 		-i $@.tmp
 	grep -F "Version: $(VERSION)" $@.tmp && \
 		grep -F "Release: $(RELEASE)" $@.tmp && \
-		grep -F "Source0: $(TARBALL)" $@.tmp && \
-		(grep -F "%setup -q -n $(PRODUCT)-$(VERSION)" $@.tmp || \
-		grep -F "%autosetup" $@.tmp) || \
+		grep -F "Source0: $(TARBALL)" $@.tmp || \
 		(echo "Failed to patch RPM spec" && exit 1)
 	@ mv -f $@.tmp $@
 	@echo
