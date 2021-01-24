@@ -37,6 +37,15 @@ PREBUILD_OS_DIST := prebuild-$(OS)-$(DIST).sh
 # gh-7: Ubuntu/Debian should export DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND=noninteractive
 
+# Pass certain set of environment variables to the debuild's
+# environment.
+ifneq ($(PRESERVE_ENVVARS),)
+comma := ,
+opt := --preserve-envvar
+DEBUILD_PRESERVE_ENVVARS_OPTS := \
+	$(opt) $(subst $(comma), $(opt) ,$(PRESERVE_ENVVARS))
+endif
+
 #
 # Run prebuild scripts
 #
@@ -53,10 +62,10 @@ prebuild: debian/$(PREBUILD)
 endif
 
 ifeq ($(wildcard debian/$(PREBUILD_OS)),)
-prebuild-$(OS):
+prebuild-$(OS): prebuild
 	# empty
 else
-prebuild-$(OS): debian/$(PREBUILD_OS)
+prebuild-$(OS): debian/$(PREBUILD_OS) prebuild
 	@echo "-------------------------------------------------------------------"
 	@echo "Running $(PREBUILD_OS) script"
 	@echo "-------------------------------------------------------------------"
@@ -65,10 +74,10 @@ prebuild-$(OS): debian/$(PREBUILD_OS)
 endif
 
 ifeq ($(wildcard debian/$(PREBUILD_OS_DIST)),)
-prebuild-$(OS)-$(DIST):
+prebuild-$(OS)-$(DIST): prebuild-$(OS)
 	# empty
 else
-prebuild-$(OS)-$(DIST): debian/$(PREBUILD_OS_DIST)
+prebuild-$(OS)-$(DIST): debian/$(PREBUILD_OS_DIST) prebuild-$(OS)
 	@echo "-------------------------------------------------------------------"
 	@echo "Running $(PREBUILD_OS_DIST) script"
 	@echo "-------------------------------------------------------------------"
@@ -111,8 +120,6 @@ prepare: $(BUILDDIR)/$(PRODUCT)-$(VERSION)/debian \
 #
 $(BUILDDIR)/$(DPKG_CHANGES): $(BUILDDIR)/$(PRODUCT)-$(VERSION)/debian \
                              $(BUILDDIR)/$(DPKG_ORIG_TARBALL) \
-                             prebuild \
-                             prebuild-$(OS) \
                              prebuild-$(OS)-$(DIST)
 	@echo "-------------------------------------------------------------------"
 	@echo "Installing dependencies"
@@ -124,13 +131,15 @@ $(BUILDDIR)/$(DPKG_CHANGES): $(BUILDDIR)/$(PRODUCT)-$(VERSION)/debian \
 	sudo apt-get update > /dev/null
 	cd $(BUILDDIR)/$(PRODUCT)-$(VERSION) && \
 		sudo mk-build-deps -i --tool "apt-get --no-install-recommends -y" && \
-		sudo rm -f *build-deps_*.deb \
+		sudo rm -f *build-deps_*.deb *build-deps_*.buildinfo *build-deps_*.changes \
 	@echo
 	@echo "-------------------------------------------------------------------"
 	@echo "Building Debian packages"
 	@echo "-------------------------------------------------------------------"
 	cd $(BUILDDIR)/$(PRODUCT)-$(VERSION) && \
 		debuild --preserve-envvar CCACHE_DIR --prepend-path=/usr/lib/ccache \
+		--preserve-envvar CI \
+		$(DEBUILD_PRESERVE_ENVVARS_OPTS) \
 		-Z$(TARBALL_COMPRESSOR) -uc -us $(SMPFLAGS)
 	rm -rf $(BUILDDIR)/$(PRODUCT)-$(VERSION)/
 	@echo "------------------------------------------------------------------"

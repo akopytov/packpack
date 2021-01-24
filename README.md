@@ -43,7 +43,7 @@ Linux distribution.
 **Traditional tools**, like `mock` and `pbuilder`, were tremendously slow and
 ridiculously overcomplicated. Customers **had to wait hours** for hotfix
 packages and the project paid thousands of dollars annually for hardware and
-electricy bills. Such cost are unacceptable for the most "free as in speech"
+electricity bills. Such costs are unacceptable for most "free as in speech"
 open-source projects.
 
 **PackPack** has reduced __push-to-package__ time **from hours to minutes**.
@@ -76,6 +76,7 @@ Distributions:
 * Ubuntu Precise / Trusty / Xenial / Yakkety / Zesty
 * Fedora 24 / 25 / Rawhide
 * CentOS 6 / 7
+* Alpine (initial support)
 
 Archictectures:
 
@@ -84,8 +85,8 @@ Archictectures:
 * `armhf` (32-bit ARM with hardware floating-point)
 * `aarch64` (64-bit ARM)
 
-The actual list of distribution is available on [Docker Hub]
-(https://hub.docker.com/r/packpack/packpack/tags/).
+The actual list of distribution is available on
+[Docker Hub](https://hub.docker.com/r/packpack/packpack/tags/).
 Please file an [issue][Issues] if you want more.
 
 ## Getting Started
@@ -155,6 +156,13 @@ See [PackPack Repositories] for additional instructions.
 ## How it Works
 
 PackPack performs the following steps:
+
+- Checks if it runs in CI environment reading predefined variables from CI
+  and sets its appropriate name in 'CI' variable from the list:
+    'appveyor', 'circle', 'github', 'gitlab', 'travis'.
+  If CI is not detected 'CI' variable will be empty.
+  'CI' is passed to RPM spec as '\_ci' macro and as 'CI' environment
+  variable to DEB rules.
 
 - A Docker container is started using `packpack/packpack:$OS$DIST` image.
 
@@ -307,6 +315,8 @@ see an example in [Tarantool GitHub](https://github.com/tarantool/tarantool) rep
    used to bump version in changelog files.
 * `DOCKER_REPO` - a Docker repository to use (default is `packpack/packpack`).
 * `CCACHE*` - Config variables for ccache, such as CCACHE_DISABLE
+* `PRESERVE_ENVVARS` - a comma separated list of environment variables to
+  preserve.
 
 See the full list of available options and detailed configuration guide in
 [pack/config.mk](pack/config.mk) configuration file.

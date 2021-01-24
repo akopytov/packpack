@@ -36,7 +36,7 @@ $(BUILDDIR)/$(TARBALL): $(BUILDDIR)/ls-lR.txt $(BUILDDIR)/VERSION.packpack
 	tar \
 		--exclude=.git --exclude='.gitignore' --exclude='.gitmodules' \
 		$(TARBALL_EXTRA_ARGS) \
-		--exclude=FreeBSD --exclude=debian --exclude=rpm --exclude=rump \
+		--exclude=FreeBSD --exclude=debian --exclude=rpm --exclude=rump --exclude=apk \
 		--transform="s,$(BUILDDIR)/VERSION.packpack,VERSION.packpack,S" \
 		--transform="s,,$(PRODUCT)-$(VERSION)/,S" \
 		--owner=root --group=root \

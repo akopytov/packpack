@@ -15,6 +15,28 @@ BUILDDIR=${BUILDDIR:-${SOURCEDIR}/build}
 # Docker repository to use
 DOCKER_REPO=${DOCKER_REPO:-packpack/packpack}
 
+# Extra parameters for docker run.
+PACKPACK_EXTRA_DOCKER_RUN_PARAMS="${PACKPACK_EXTRA_DOCKER_RUN_PARAMS:-}"
+
+# Set CI variable to CI provider name
+CI=""
+if [ "${APPVEYOR:-}" = "True" -o "${APPVEYOR:-}" = "true" ]; then
+    # https://www.appveyor.com/docs/environment-variables/
+    CI="appveyor"
+elif [ "${CIRCLECI:-}" = "true" ]; then
+    # https://circleci.com/docs/2.0/env-vars/
+    CI="circle"
+elif [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    # https://help.github.com/en/actions/configuring-and-managing-workflows/using-environment-variables
+    CI="github"
+elif [ "${GITLAB_CI:-}" = "true" ]; then
+    # https://docs.gitlab.com/ee/ci/variables/
+    CI="gitlab"
+elif [ "${TRAVIS:-}" = "true" ]; then
+    # https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
+    CI="travis"
+fi
+
 # Docker architecture
 if [ -z "${ARCH}" ]; then
     # Use uname -m instead of HOSTTYPE
@@ -95,22 +117,59 @@ esac
 # Create an entry point for Docker to allow builds from non-root user
 #
 mkdir -p ${BUILDDIR}
-(
-echo "#!/bin/sh";
-echo "useradd -u $(id -u) $USER";
-echo "usermod -a -G sudo $USER 2>/dev/null || :";
-echo "usermod -a -G wheel $USER 2>/dev/null || :";
-echo "usermod -a -G adm $USER 2>/dev/null || :";
-echo "export HOME=/home/$USER" ;
-echo "exec chroot --userspec=$USER / \$@";
-) > ${BUILDDIR}/userwrapper.sh
+
+if [ "${OS}" = "alpine" ]; then
+    (
+        echo "#!/bin/sh";
+        echo "adduser -u $(id -u) -D $USER";
+        echo "adduser $USER adm";
+        echo "adduser $USER wheel";
+        echo "adduser $USER abuild";
+        echo "export HOME=/home/$USER" ;
+        echo "abuild-keygen -a -i -n";
+        echo "su-exec $USER \$@";
+    ) > ${BUILDDIR}/userwrapper.sh
+else
+    (
+        echo "#!/bin/sh";
+        echo "useradd -u $(id -u) $USER";
+        echo "usermod -a -G sudo $USER 2>/dev/null || :";
+        echo "usermod -a -G wheel $USER 2>/dev/null || :";
+        echo "usermod -a -G adm $USER 2>/dev/null || :";
+        echo "export HOME=/home/$USER" ;
+        echo "exec chroot --userspec=$USER / \$@";
+    ) > ${BUILDDIR}/userwrapper.sh
+fi
+
+
 chmod a+x ${BUILDDIR}/userwrapper.sh
 
 #
 # Save defined configuration variables to ./env file
 #
-env | grep -E "^PRODUCT=|^VERSION=|^RELEASE=|^ABBREV=|^TARBALL_|^CHANGELOG_|^CCACHE_|^PACKAGECLOUD_|^SMPFLAGS=|^OS=|^DIST=" \
-    > ${BUILDDIR}/env
+env | grep -E "^PRODUCT=|^VERSION=|^RELEASE=|^ABBREV=" > ${BUILDDIR}/env
+env | grep -E "^TARBALL_|^CHANGELOG_|^CCACHE_|^PACKAGECLOUD_" >> ${BUILDDIR}/env
+env | grep -E "^SMPFLAGS=|^OS=|^DIST=" >> ${BUILDDIR}/env
+
+#
+# Pass variables with 'VAR_' prefix.
+#
+env | grep "^VAR_" >> ${BUILDDIR}/env
+
+#
+# Pass continuous interation service name.
+#
+echo "CI=${CI}" >> ${BUILDDIR}/env
+
+#
+# Preserve environment variables as requested by a user.
+#
+if [ -n "${PRESERVE_ENVVARS:-}" ]; then
+    echo "PRESERVE_ENVVARS=${PRESERVE_ENVVARS}" >> ${BUILDDIR}/env
+    (IFS=,; for envvar in ${PRESERVE_ENVVARS}; do
+        env | grep "^${envvar}=" >> "${BUILDDIR}/env"
+    done)
+fi
 
 #
 # Setup cache directory
@@ -130,6 +189,7 @@ chcon -Rt svirt_sandbox_file_t ${PACKDIR} ${SOURCEDIR} ${BUILDDIR} \
 set -ex
 docker pull ${DOCKER_REPO}:${DOCKER_IMAGE}
 docker run \
+        ${PACKPACK_EXTRA_DOCKER_RUN_PARAMS} \
         --volume "${PACKDIR}:/pack:ro" \
         --volume "${SOURCEDIR}:/source:ro" \
         --volume "${BUILDDIR}:/build" \
@@ -139,6 +199,7 @@ docker run \
         --entrypoint=/build/userwrapper.sh \
         -e XDG_CACHE_HOME=/cache \
         -e CCACHE_DIR=/cache/ccache \
+        -e TMPDIR=/tmp \
         --volume "${CACHE_DIR}:/cache" \
         ${DOCKER_REPO}:${DOCKER_IMAGE} \
         make -f /pack/Makefile -C /source BUILDDIR=/build -j "$@"
